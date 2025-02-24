@@ -281,6 +281,8 @@ class Enemy:
 class Obstacle:
     def __init__(self):
         o = config["obstacle"]
+        
+        # 1) Determine collision circle radius
         self.radius = random.randint(o["radius_min"], o["radius_max"])
         self.color = tuple(o["color"])
         self.health = o["initial_health"]
@@ -289,12 +291,24 @@ class Obstacle:
         self.speed = random.uniform(o["speed_min"], o["speed_max"])
         self.collision_damage = o["collision_damage"]
 
-        # Sprites
+        # 2) Load the sprite from your global 'loaded_sprites' dict.
         self.sprite_key = "obstacle"
-        if self.sprite_key in loaded_sprites:
-            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
-            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+        info = loaded_sprites.get(self.sprite_key)
+        if info:
+            # The base surface from config (possibly already scaled from settings.json)
+            base_surf = info["surface"]
+
+            # 3) Override the sprite scale to match the collision circle.
+            #    The final sprite size should be diameter x diameter => (2*radius, 2*radius).
+            new_width = 2 * self.radius
+            new_height = 2 * self.radius
+            self.sprite_surf = pygame.transform.scale(base_surf, (new_width, new_height))
+
+            # 4) Offset so the sprite is centered around (self.x, self.y).
+            #    i.e., if the sprite is 2*radius wide, half of that is 'radius'.
+            self.sprite_offset = (self.radius, self.radius)
         else:
+            # Fallback if sprite not found
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
 
@@ -306,11 +320,12 @@ class Obstacle:
             offset_x, offset_y = self.sprite_offset
             screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
         else:
+            # Fallback: draw a circle if no sprite
             pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
-        # 2. Draw the collision circle on top (optional debug)
+
+        # Optional: debug collision circle
         debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
         if debug_collisions:
-            # A thin red circle outline, width=1
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
