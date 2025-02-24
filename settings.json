@@ -1,0 +1,59 @@
+{
+    "window": {
+      "width": 800,
+      "height": 600,
+      "fps": 60
+    },
+    "player": {
+      "radius": 15,
+      "initial_health": 200,
+      "fire_delay_ms": 250,
+      "max_speed": 8,
+      "color": [0, 255, 0],
+      "collision_with_enemy_damage": 10
+    },
+    "bullet": {
+      "radius": 5,
+      "player_bullet_speed_y": -12,
+      "player_bullet_color": [255, 255, 255],
+      "enemy_bullet_color": [255, 0, 0],
+      "enemy_bullet_base_speed": 2.5,
+      "enemy_bullet_damage": 5
+    },
+    "enemy": {
+      "radius": 15,
+      "initial_health": 3,
+      "base_speed": 1.0,
+      "fire_delay_ms": 1200,
+      "color": [0, 100, 255]
+    },
+    "obstacle": {
+      "radius_min": 10,
+      "radius_max": 25,
+      "speed_min": 1.0,
+      "speed_max": 2.5,
+      "color": [128, 128, 128],
+      "collision_damage": 5
+    },
+    "pickup": {
+      "radius": 10,
+      "speed_min": 1.0,
+      "speed_max": 2.0,
+      "color": [255, 192, 203],
+      "restore_amount": 25
+    },
+    "difficulty": {
+      "time_scale_ms": 30000,
+      "wave_interval_start_ms": 3000,
+      "wave_interval_min_ms": 1000,
+      "wave_interval_decrement_ms": 5,
+      "enemy_spawn_factor": 0.5,
+      "obstacle_spawn_factor": 6,
+      "pickup_chance": 0.25
+    },
+    "colors": {
+      "WHITE": [255, 255, 255],
+      "BLACK": [0, 0, 0]
+    }
+  }
+  
