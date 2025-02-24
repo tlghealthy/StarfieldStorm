@@ -1,39 +1,44 @@
 {
     "window": {
-      "width": 800,
-      "height": 600,
+      "width": 1920,
+      "height": 1080,
       "fps": 60
+    },
+    "colors": {
+      "WHITE": [255, 255, 255],
+      "BLACK": [0, 0, 0]
     },
     "player": {
       "radius": 15,
-      "initial_health": 200,
-      "fire_delay_ms": 250,
+      "initial_health": 150,
+      "fire_delay_ms": 200,
       "max_speed": 8,
       "color": [0, 255, 0],
       "collision_with_enemy_damage": 10
     },
     "bullet": {
       "radius": 5,
-      "player_bullet_speed_y": -12,
+      "player_bullet_speed_y": -10,
       "player_bullet_color": [255, 255, 255],
       "enemy_bullet_color": [255, 0, 0],
-      "enemy_bullet_base_speed": 2.5,
+      "enemy_bullet_base_speed": 3.0,
       "enemy_bullet_damage": 5
     },
     "enemy": {
-      "radius": 15,
+      "radius": 30,
       "initial_health": 3,
       "base_speed": 1.0,
-      "fire_delay_ms": 1200,
+      "fire_delay_ms": 1000,
       "color": [0, 100, 255]
     },
     "obstacle": {
       "radius_min": 10,
+      "initial_health": 5,
       "radius_max": 25,
       "speed_min": 1.0,
       "speed_max": 2.5,
       "color": [128, 128, 128],
-      "collision_damage": 5
+      "collision_damage": 15
     },
     "pickup": {
       "radius": 10,
@@ -43,17 +48,49 @@
       "restore_amount": 25
     },
     "difficulty": {
-      "time_scale_ms": 30000,
-      "wave_interval_start_ms": 3000,
-      "wave_interval_min_ms": 1000,
+      "time_scale_ms": 20000,
+      "wave_interval_start_ms": 2500,
+      "wave_interval_min_ms": 800,
       "wave_interval_decrement_ms": 5,
       "enemy_spawn_factor": 0.5,
       "obstacle_spawn_factor": 6,
-      "pickup_chance": 0.25
+      "pickup_chance": 0.2
     },
-    "colors": {
-      "WHITE": [255, 255, 255],
-      "BLACK": [0, 0, 0]
+    
+    "sprites": {
+      "player_ship": {
+        "path": "assets/player_ship.png",
+        "scale": [32, 32],
+        "offset": [16, 16]
+      },
+      "enemy_ship": {
+        "path": "assets/enemy_ship.png",
+        "scale": [32, 32],
+        "offset": [16, 16]
+      },
+      "obstacle": {
+        "path": "assets/asteroid.png",
+        "scale": [64, 64],
+        "offset": [32, 32]
+      },
+      "health_pickup": {
+        "path": "assets/health_orb.png",
+        "scale": [32, 32],
+        "offset": [16, 16]
+      },
+      "player_bullet": {
+        "path": "assets/bullet_player.png",
+        "scale": [32, 32],
+        "offset": [16, 16]
+      },
+      "enemy_bullet": {
+        "path": "assets/bullet_enemy.png",
+        "scale": [32, 32],
+        "offset": [16, 16]
+      }
+    },
+    "debug": {
+        "show_collision_circles": false
     }
   }
   

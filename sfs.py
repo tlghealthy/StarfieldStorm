@@ -1,9 +1,17 @@
 """
 starfield_storm.py
 
-A single-file 2D bullet hell game in Python + Pygame, loading key constants
-and values from 'settings.json' for easy tweaking, now with Controls Explanation
-on the Start (Menu) screen.
+A single-file 2D bullet hell game in Python + Pygame, loading constants
+and sprites (with scaling/offsets) from 'settings.json'.
+
+Highlights:
+1. Sprites are loaded from config["sprites"].
+2. Each sprite entry in the JSON can specify:
+   - "path": relative/absolute filepath to the image (PNG/JPG/etc.).
+   - "scale": [width, height] to scale the sprite after loading.
+   - "offset": [offset_x, offset_y], used to center or position the sprite 
+       relative to the object's x,y in the game.
+3. If a sprite file is missing, we fallback to drawing a colored shape.
 
 Prerequisites:
     pip install pygame
@@ -17,34 +25,101 @@ import random
 import math
 import sys
 import json
+import os
 
-# Load settings from JSON
+
 SETTINGS_FILE = "settings.json"
 
 with open(SETTINGS_FILE, "r") as f:
     config = json.load(f)
 
-# Pull top-level config
+# Window settings
 WIN_WIDTH = config["window"]["width"]
 WIN_HEIGHT = config["window"]["height"]
 FPS = config["window"]["fps"]
 
-# Grab some extra color references if desired
+# Basic colors (for fallback or UI)
 COLOR_BLACK = tuple(config["colors"]["BLACK"])
 COLOR_WHITE = tuple(config["colors"]["WHITE"])
 
+pygame.init()
+pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
+
+###############################################################################
+# SPRITE LOADING
+###############################################################################
+def load_sprites_from_config(sprite_conf):
+    """
+    Reads the "sprites" section of settings.json.
+    Returns a dict of:
+      {
+        "player_ship": {
+          "surface": <pygame.Surface or fallback>,
+          "offset": (offset_x, offset_y)
+        },
+        "enemy_ship": {...},
+        ...
+      }
+    """
+    loaded = {}
+    for sprite_name, info in sprite_conf.items():
+        # Expected keys: "path", "scale", "offset"
+        path = info.get("path", "")
+        scale = info.get("scale", [32, 32])   # default 32x32
+        offset = info.get("offset", [16, 16]) # default half of scale
+
+        if path and os.path.isfile(path):
+            # Load image
+            surf = pygame.image.load(path).convert_alpha()
+            # Scale if needed
+            if scale:
+                w, h = scale
+                surf = pygame.transform.scale(surf, (w, h))
+        else:
+            # Fallback: create a placeholder if file not found
+            w, h = scale
+            surf = pygame.Surface((w, h), pygame.SRCALPHA)
+            # semi-transparent magenta for fallback
+            surf.fill((255, 0, 255, 128))
+            print(f"Warning: Sprite file not found or missing path for '{sprite_name}' -> using fallback")
+
+        # Store in dictionary
+        loaded[sprite_name] = {
+            "surface": surf,
+            "offset": tuple(offset)
+        }
+    return loaded
+
+###############################################################################
+# GLOBAL: LOAD ALL SPRITES
+###############################################################################
+sprite_conf = config.get("sprites", {})
+loaded_sprites = load_sprites_from_config(sprite_conf)
+
+###############################################################################
+# GAME CLASSES
+###############################################################################
 class Player:
     def __init__(self):
-        p = config["player"]  # shortcut
+        p = config["player"]
         self.radius = p["radius"]
         self.x = WIN_WIDTH // 2
         self.y = WIN_HEIGHT // 2
         self.health = p["initial_health"]
         self.color = tuple(p["color"])
-        self.fire_delay = p["fire_delay_ms"]  # ms between shots
+        self.fire_delay = p["fire_delay_ms"]
         self.last_shot_time = pygame.time.get_ticks()
         self.max_speed = p["max_speed"]
         self.collision_with_enemy_damage = p["collision_with_enemy_damage"]
+
+        # Sprite references (optional fallback if missing in config)
+        self.sprite_key = "player_ship"
+        if self.sprite_key in loaded_sprites:
+            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
+            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+        else:
+            self.sprite_surf = None
+            self.sprite_offset = (self.radius, self.radius)
 
     def update(self):
         """Move player toward the mouse cursor but clamp to max speed."""
@@ -52,8 +127,8 @@ class Player:
         dx = mouse_x - self.x
         dy = mouse_y - self.y
         dist = math.hypot(dx, dy)
+
         if dist > 0:
-            # Limit movement to max_speed
             if dist > self.max_speed:
                 scale = self.max_speed / dist
                 dx *= scale
@@ -66,11 +141,9 @@ class Player:
         self.y = max(self.radius, min(WIN_HEIGHT - self.radius, self.y))
 
     def shoot(self, bullets):
-        """Continuously fire bullets if enough time has passed."""
         now = pygame.time.get_ticks()
         if now - self.last_shot_time >= self.fire_delay:
             bullet_conf = config["bullet"]
-            # Spawn a new bullet from the player's position
             bullets.append(Bullet(
                 x=self.x,
                 y=self.y,
@@ -82,7 +155,22 @@ class Player:
             self.last_shot_time = now
 
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        if self.sprite_surf:
+            # Use sprite with offset
+            offset_x, offset_y = self.sprite_offset
+            draw_x = int(self.x - offset_x)
+            draw_y = int(self.y - offset_y)
+            screen.blit(self.sprite_surf, (draw_x, draw_y))
+        else:
+            # fallback shape
+            pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        
+        # 2. Draw the collision circle on top (optional debug)
+        debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
+        if debug_collisions:
+            # A thin red circle outline, width=1
+            pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
+
 
 class Bullet:
     def __init__(self, x, y, dx, dy, color, from_player=False):
@@ -95,15 +183,39 @@ class Bullet:
         self.color = color
         self.from_player = from_player
 
+        # Optional: use separate sprite for bullet
+        if from_player:
+            self.sprite_key = "player_bullet"
+        else:
+            self.sprite_key = "enemy_bullet"
+
+        if self.sprite_key in loaded_sprites:
+            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
+            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+        else:
+            self.sprite_surf = None
+            self.sprite_offset = (self.radius, self.radius)
+
     def update(self):
         self.x += self.dx
         self.y += self.dy
 
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        if self.sprite_surf:
+            offset_x, offset_y = self.sprite_offset
+            screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
+        else:
+            pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+            
+        # 2. Draw the collision circle on top (optional debug)
+        debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
+        if debug_collisions:
+            # A thin red circle outline, width=1
+            pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
         return (self.x < 0 or self.x > WIN_WIDTH or self.y < 0 or self.y > WIN_HEIGHT)
+
 
 class Enemy:
     def __init__(self, x, y, speed, difficulty):
@@ -119,16 +231,24 @@ class Enemy:
         self.speed = speed
         self.difficulty = difficulty
 
+        # Sprites
+        self.sprite_key = "enemy_ship"
+        if self.sprite_key in loaded_sprites:
+            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
+            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+        else:
+            self.sprite_surf = None
+            self.sprite_offset = (self.radius, self.radius)
+
     def update(self, bullets, player):
-        # Move downward (or a simple pattern)
+        # Move downward
         self.y += self.speed
-        
-        # Possibly fire bullets
+
+        # Fire bullets
         now = pygame.time.get_ticks()
         if now - self.last_shot_time >= self.fire_delay:
             bullet_conf = config["bullet"]
             angle = math.atan2(player.y - self.y, player.x - self.x)
-            # base speed + (some scaling * difficulty)
             bullet_speed = bullet_conf["enemy_bullet_base_speed"] + (self.difficulty * 0.1)
             dx = bullet_speed * math.cos(angle)
             dy = bullet_speed * math.sin(angle)
@@ -143,29 +263,59 @@ class Enemy:
             self.last_shot_time = now
 
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        if self.sprite_surf:
+            offset_x, offset_y = self.sprite_offset
+            screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
+        else:
+            pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        # 2. Draw the collision circle on top (optional debug)
+        debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
+        if debug_collisions:
+            # A thin red circle outline, width=1
+            pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
         return (self.y > WIN_HEIGHT + self.radius)
+
 
 class Obstacle:
     def __init__(self):
         o = config["obstacle"]
         self.radius = random.randint(o["radius_min"], o["radius_max"])
         self.color = tuple(o["color"])
+        self.health = o["initial_health"]
         self.x = random.randint(self.radius, WIN_WIDTH - self.radius)
         self.y = -self.radius
         self.speed = random.uniform(o["speed_min"], o["speed_max"])
         self.collision_damage = o["collision_damage"]
 
+        # Sprites
+        self.sprite_key = "obstacle"
+        if self.sprite_key in loaded_sprites:
+            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
+            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+        else:
+            self.sprite_surf = None
+            self.sprite_offset = (self.radius, self.radius)
+
     def update(self):
         self.y += self.speed
 
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        if self.sprite_surf:
+            offset_x, offset_y = self.sprite_offset
+            screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
+        else:
+            pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        # 2. Draw the collision circle on top (optional debug)
+        debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
+        if debug_collisions:
+            # A thin red circle outline, width=1
+            pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
         return (self.y > WIN_HEIGHT + self.radius)
+
 
 class HealthPickup:
     """Floating item that restores some health if collected by the player."""
@@ -178,20 +328,41 @@ class HealthPickup:
         self.speed = random.uniform(p["speed_min"], p["speed_max"])
         self.restore_amount = p["restore_amount"]
 
+        # Sprites
+        self.sprite_key = "health_pickup"
+        if self.sprite_key in loaded_sprites:
+            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
+            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+        else:
+            self.sprite_surf = None
+            self.sprite_offset = (self.radius, self.radius)
+
     def update(self):
         self.y += self.speed
 
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        if self.sprite_surf:
+            offset_x, offset_y = self.sprite_offset
+            screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
+        else:
+            pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+        # 2. Draw the collision circle on top (optional debug)
+        debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
+        if debug_collisions:
+            # A thin red circle outline, width=1
+            pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
         return (self.y > WIN_HEIGHT + self.radius)
 
+###############################################################################
+# MAIN GAME CLASS
+###############################################################################
 class Game:
     def __init__(self):
-        pygame.init()
+        
         self.screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-        pygame.display.set_caption("Starfield Storm w/ JSON Settings")
+        pygame.display.set_caption("Starfield Storm w/ Sprites & JSON Settings")
         self.clock = pygame.time.Clock()
         self.running = True
         self.state = "MENU"
@@ -208,7 +379,6 @@ class Game:
         self.wave_interval = diff_conf["wave_interval_start_ms"]
         self.wave_interval_min = diff_conf["wave_interval_min_ms"]
         self.wave_interval_decrement = diff_conf["wave_interval_decrement_ms"]
-
         self.last_wave_time = pygame.time.get_ticks()
 
         # For starfield background
@@ -230,10 +400,10 @@ class Game:
 
     def menu_loop(self):
         self.screen.fill(COLOR_BLACK)
-        self.draw_text("STARFIELD STORM (JSON Settings)", 50, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 90, COLOR_WHITE)
+        self.draw_text("STARFIELD STORM (Sprites & JSON)", 50, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 90, COLOR_WHITE)
         self.draw_text("Press [SPACE] to START or [Q] to QUIT", 24, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 40, COLOR_WHITE)
 
-        # Controls explanation added here:
+        # Controls explanation:
         self.draw_text("CONTROLS:", 24, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 10, COLOR_WHITE)
         self.draw_text("Move the mouse to steer your ship (speed limited).", 20, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 40, COLOR_WHITE)
         self.draw_text("Ship fires automatically. Avoid enemies & obstacles.", 20, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 65, COLOR_WHITE)
@@ -279,10 +449,9 @@ class Game:
 
         # Update player
         self.player.update()
-        # Continuous shooting
         self.player.shoot(self.bullets)
 
-        # Difficulty scales: increments every X ms from settings
+        # Difficulty scale
         diff_conf = config["difficulty"]
         elapsed_time = pygame.time.get_ticks()
         difficulty = (elapsed_time // diff_conf["time_scale_ms"])
@@ -294,7 +463,6 @@ class Game:
             self.spawn_obstacles(difficulty)
             self.spawn_health_pickups()
             self.last_wave_time = elapsed_time
-            # Gradually decrease wave interval
             self.wave_interval = max(self.wave_interval_min, self.wave_interval - self.wave_interval_decrement)
 
         # Update bullets
@@ -315,7 +483,7 @@ class Game:
             if o.off_screen():
                 self.obstacles.remove(o)
 
-        # Update health pickups
+        # Update pickups
         for p in self.pickups[:]:
             p.update()
             if p.off_screen():
@@ -328,12 +496,11 @@ class Game:
         if self.player.health <= 0:
             self.state = "GAME_OVER"
 
-        # Draw everything
+        # Draw all
         self.draw_game()
         pygame.display.flip()
 
     def spawn_enemies(self, difficulty):
-        """Spawn a wave of enemies based on difficulty."""
         diff_conf = config["difficulty"]
         enemy_count = 1 + int(difficulty * diff_conf["enemy_spawn_factor"])
         e_conf = config["enemy"]
@@ -341,19 +508,16 @@ class Game:
         for _ in range(enemy_count):
             x = random.randint(20, WIN_WIDTH - 20)
             y = -30
-            # base_speed plus some scaling
             speed = e_conf["base_speed"] + difficulty * 0.05
             self.enemies.append(Enemy(x, y, speed, difficulty))
 
     def spawn_obstacles(self, difficulty):
-        """Spawn some obstacles based on difficulty."""
         diff_conf = config["difficulty"]
         obstacle_count = max(1, int(difficulty // diff_conf["obstacle_spawn_factor"]))
         for _ in range(obstacle_count):
             self.obstacles.append(Obstacle())
 
     def spawn_health_pickups(self):
-        """Small random chance each wave to spawn a health pickup."""
         diff_conf = config["difficulty"]
         if random.random() < diff_conf["pickup_chance"]:
             self.pickups.append(HealthPickup())
@@ -374,6 +538,15 @@ class Game:
                         if b in self.bullets:
                             self.bullets.remove(b)
                         break
+                for o in self.obstacles[:]:
+                    if self.distance(b.x, b.y, o.x, o.y) < (b.radius + o.radius):
+                        o.health -= 1
+                        if o.health <= 0:
+                            self.obstacles.remove(o)
+                            self.score += 10
+                        if b in self.bullets:
+                            self.bullets.remove(b)
+                        break
 
         # Enemy bullets vs Player
         for b in self.bullets[:]:
@@ -387,24 +560,20 @@ class Game:
         for o in self.obstacles[:]:
             if self.distance(o.x, o.y, self.player.x, self.player.y) < (o.radius + self.player.radius):
                 self.player.health -= o.collision_damage
-                # Destroy obstacle after collision
                 if o in self.obstacles:
                     self.obstacles.remove(o)
 
         # Enemies vs Player
         for e in self.enemies[:]:
             if self.distance(e.x, e.y, self.player.x, self.player.y) < (e.radius + self.player.radius):
-                # Player takes damage from collision
                 self.player.health -= self.player.collision_with_enemy_damage
-                # Enemy is destroyed on collision
                 if e in self.enemies:
                     self.enemies.remove(e)
 
-        # Health Pickups vs Player
+        # Health pickups vs Player
         for p in self.pickups[:]:
             if self.distance(p.x, p.y, self.player.x, self.player.y) < (p.radius + self.player.radius):
                 self.player.health += p.restore_amount
-                # Optionally cap player's health
                 self.player.health = min(self.player.health, config["player"]["initial_health"])
                 self.pickups.remove(p)
 
@@ -423,31 +592,26 @@ class Game:
 
     def draw_game(self):
         self.screen.fill(COLOR_BLACK)
-
         # Draw starfield
         for (sx, sy) in self.stars:
             pygame.draw.circle(self.screen, COLOR_WHITE, (sx, sy), 2)
 
-        # Draw player
+        # Player
         self.player.draw(self.screen)
-
-        # Draw bullets
+        # Bullets
         for b in self.bullets:
             b.draw(self.screen)
-
-        # Draw enemies
+        # Enemies
         for e in self.enemies:
             e.draw(self.screen)
-
-        # Draw obstacles
+        # Obstacles
         for o in self.obstacles:
             o.draw(self.screen)
-
-        # Draw health pickups
+        # Pickups
         for p in self.pickups:
             p.draw(self.screen)
 
-        # UI: Score and Health
+        # UI
         self.draw_text(f"Score: {int(self.score)}", 24, 50, 20, COLOR_WHITE, align="left")
         self.draw_text(f"Health: {self.player.health}", 24, WIN_WIDTH - 150, 20, COLOR_WHITE, align="left")
 
