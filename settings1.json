@@ -9,7 +9,7 @@
       "BLACK": [0, 0, 0]
     },
     "player": {
-      "radius": 30,
+      "radius": 15,
       "initial_health": 150,
       "fire_delay_ms": 200,
       "max_speed": 8,
@@ -17,7 +17,7 @@
       "collision_with_enemy_damage": 10
     },
     "bullet": {
-      "radius": 10,
+      "radius": 5,
       "player_bullet_speed_y": -10,
       "player_bullet_color": [255, 255, 255],
       "enemy_bullet_color": [255, 0, 0],
@@ -25,14 +25,14 @@
       "enemy_bullet_damage": 5
     },
     "enemy": {
-      "radius": 45,
+      "radius": 30,
       "initial_health": 3,
       "base_speed": 1.0,
       "fire_delay_ms": 1000,
       "color": [0, 100, 255]
     },
     "obstacle": {
-      "radius_min": 20,
+      "radius_min": 10,
       "initial_health": 5,
       "radius_max": 25,
       "speed_min": 1.0,
@@ -41,7 +41,7 @@
       "collision_damage": 15
     },
     "pickup": {
-      "radius": 20,
+      "radius": 10,
       "speed_min": 1.0,
       "speed_max": 2.0,
       "color": [255, 192, 203],
@@ -60,13 +60,13 @@
     "sprites": {
       "player_ship": {
         "path": "assets/player_ship.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
+        "scale": [32, 32],
+        "offset": [16, 16]
       },
       "enemy_ship": {
         "path": "assets/enemy_ship.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
+        "scale": [32, 32],
+        "offset": [16, 16]
       },
       "obstacle": {
         "path": "assets/asteroid.png",
@@ -75,81 +75,22 @@
       },
       "health_pickup": {
         "path": "assets/health_orb.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
+        "scale": [32, 32],
+        "offset": [16, 16]
       },
       "player_bullet": {
         "path": "assets/bullet_player.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
+        "scale": [32, 32],
+        "offset": [16, 16]
       },
       "enemy_bullet": {
         "path": "assets/bullet_enemy.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
+        "scale": [32, 32],
+        "offset": [16, 16]
       }
     },
     "debug": {
         "show_collision_circles": false
-    },
-
-    "powerups": {
-      "speed_boost": {
-        "spawn_chance": 0.05,
-        "duration": 5000,
-        "speed_multiplier": 2.0,
-        "color": [0, 255, 255],
-        "sprite_path": ""  
-      },
-      "spread_shot": {
-        "spawn_chance": 0.03,
-        "duration": 5000,
-        "bullet_count": 3,
-        "angle_degrees": 15,
-        "color": [255, 128, 0],
-        "sprite_path": ""
-      },
-      "rapid_fire": {
-        "spawn_chance": 0.02,
-        "duration": 5000,
-        "fire_delay_factor": 0.3,
-        "color": [255, 255, 0],
-        "sprite_path": ""
-      },
-      "shield": {
-        "spawn_chance": 0.02,
-        "duration": 5000,
-        "damage_reduction": 1.0,
-        "color": [0, 128, 255],
-        "sprite_path": ""
-      },
-      "nuke": {
-        "spawn_chance": 0.01,
-        "duration": 1000,
-        "color": [255, 0, 255],
-        "sprite_path": ""
-      },
-    
-      "rarities": {
-        "common": {
-          "weight": 0.7,
-          "duration_multiplier": 1.0,
-          "outline_color": [180, 180, 180],
-          "outline_thickness": 2
-        },
-        "uncommon": {
-          "weight": 0.25,
-          "duration_multiplier": 2.0,
-          "outline_color": [0, 255, 0],
-          "outline_thickness": 2
-        },
-        "rare": {
-          "weight": 0.05,
-          "duration_multiplier": 5.0,
-          "outline_color": [255, 0, 0],
-          "outline_thickness": 3
-        }
-      }
     }
   }
   

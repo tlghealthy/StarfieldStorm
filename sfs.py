@@ -1,32 +1,9 @@
-"""
-starfield_storm.py
-
-A single-file 2D bullet hell game in Python + Pygame, loading constants
-and sprites (with scaling/offsets) from 'settings.json'.
-
-Highlights:
-1. Sprites are loaded from config["sprites"].
-2. Each sprite entry in the JSON can specify:
-   - "path": relative/absolute filepath to the image (PNG/JPG/etc.).
-   - "scale": [width, height] to scale the sprite after loading.
-   - "offset": [offset_x, offset_y], used to center or position the sprite 
-       relative to the object's x,y in the game.
-3. If a sprite file is missing, we fallback to drawing a colored shape.
-
-Prerequisites:
-    pip install pygame
-
-Usage:
-    python starfield_storm.py
-"""
-
 import pygame
 import random
 import math
 import sys
 import json
 import os
-
 
 SETTINGS_FILE = "settings.json"
 
@@ -49,29 +26,15 @@ pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
 # SPRITE LOADING
 ###############################################################################
 def load_sprites_from_config(sprite_conf):
-    """
-    Reads the "sprites" section of settings.json.
-    Returns a dict of:
-      {
-        "player_ship": {
-          "surface": <pygame.Surface or fallback>,
-          "offset": (offset_x, offset_y)
-        },
-        "enemy_ship": {...},
-        ...
-      }
-    """
+    """Loads or creates fallback surfaces for your main sprites (player, enemy, etc.)."""
     loaded = {}
     for sprite_name, info in sprite_conf.items():
-        # Expected keys: "path", "scale", "offset"
         path = info.get("path", "")
-        scale = info.get("scale", [32, 32])   # default 32x32
-        offset = info.get("offset", [16, 16]) # default half of scale
+        scale = info.get("scale", [32, 32])
+        offset = info.get("offset", [16, 16])
 
         if path and os.path.isfile(path):
-            # Load image
             surf = pygame.image.load(path).convert_alpha()
-            # Scale if needed
             if scale:
                 w, h = scale
                 surf = pygame.transform.scale(surf, (w, h))
@@ -79,20 +42,15 @@ def load_sprites_from_config(sprite_conf):
             # Fallback: create a placeholder if file not found
             w, h = scale
             surf = pygame.Surface((w, h), pygame.SRCALPHA)
-            # semi-transparent magenta for fallback
             surf.fill((255, 0, 255, 128))
             print(f"Warning: Sprite file not found or missing path for '{sprite_name}' -> using fallback")
 
-        # Store in dictionary
         loaded[sprite_name] = {
             "surface": surf,
             "offset": tuple(offset)
         }
     return loaded
 
-###############################################################################
-# GLOBAL: LOAD ALL SPRITES
-###############################################################################
 sprite_conf = config.get("sprites", {})
 loaded_sprites = load_sprites_from_config(sprite_conf)
 
@@ -112,7 +70,14 @@ class Player:
         self.max_speed = p["max_speed"]
         self.collision_with_enemy_damage = p["collision_with_enemy_damage"]
 
-        # Sprite references (optional fallback if missing in config)
+        # Save original values for reverting after powerups
+        self.base_fire_delay = self.fire_delay
+        self.base_max_speed = self.max_speed
+
+        # Track active powerups + their expiry times => {"speed_boost": 123456, ...}
+        self.active_powerups = {}
+
+        # Sprites
         self.sprite_key = "player_ship"
         if self.sprite_key in loaded_sprites:
             self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
@@ -122,7 +87,9 @@ class Player:
             self.sprite_offset = (self.radius, self.radius)
 
     def update(self):
-        """Move player toward the mouse cursor but clamp to max speed."""
+        """Move player and handle powerup expirations."""
+        self.handle_powerup_expiration()
+
         mouse_x, mouse_y = pygame.mouse.get_pos()
         dx = mouse_x - self.x
         dy = mouse_y - self.y
@@ -140,36 +107,85 @@ class Player:
         self.x = max(self.radius, min(WIN_WIDTH - self.radius, self.x))
         self.y = max(self.radius, min(WIN_HEIGHT - self.radius, self.y))
 
+    def handle_powerup_expiration(self):
+        now = pygame.time.get_ticks()
+        expired = [ptype for ptype, end_time in self.active_powerups.items() if now >= end_time]
+        for ptype in expired:
+            del self.active_powerups[ptype]
+
+        # Revert to base values
+        self.fire_delay = self.base_fire_delay
+        self.max_speed = self.base_max_speed
+
+        # Re-apply any active ones
+        if "rapid_fire" in self.active_powerups:
+            factor = config["powerups"]["rapid_fire"]["fire_delay_factor"]
+            self.fire_delay = int(self.base_fire_delay * factor)
+
+        if "speed_boost" in self.active_powerups:
+            multiplier = config["powerups"]["speed_boost"]["speed_multiplier"]
+            self.max_speed = self.base_max_speed * multiplier
+
     def shoot(self, bullets):
         now = pygame.time.get_ticks()
         if now - self.last_shot_time >= self.fire_delay:
             bullet_conf = config["bullet"]
-            bullets.append(Bullet(
-                x=self.x,
-                y=self.y,
-                dx=0,
-                dy=bullet_conf["player_bullet_speed_y"],
-                color=tuple(bullet_conf["player_bullet_color"]),
-                from_player=True
-            ))
+            # Check for spread_shot
+            if "spread_shot" in self.active_powerups:
+                sconf = config["powerups"]["spread_shot"]
+                count = sconf["bullet_count"]
+                angle_deg = sconf["angle_degrees"]
+                total_spread = (count - 1) * angle_deg
+                start_angle = -total_spread / 2
+
+                for i in range(count):
+                    angle = math.radians(start_angle + i * angle_deg)
+                    base_speed = -bullet_conf["player_bullet_speed_y"]
+                    dx = base_speed * math.sin(angle)
+                    dy = base_speed * -math.cos(angle)
+                    bullets.append(Bullet(
+                        x=self.x,
+                        y=self.y,
+                        dx=dx,
+                        dy=dy,
+                        color=tuple(bullet_conf["player_bullet_color"]),
+                        from_player=True
+                    ))
+            else:
+                # Single bullet
+                bullet_speed = bullet_conf["player_bullet_speed_y"]
+                bullets.append(Bullet(
+                    x=self.x,
+                    y=self.y,
+                    dx=0,
+                    dy=bullet_speed,
+                    color=tuple(bullet_conf["player_bullet_color"]),
+                    from_player=True
+                ))
+
             self.last_shot_time = now
 
     def draw(self, screen):
         if self.sprite_surf:
-            # Use sprite with offset
             offset_x, offset_y = self.sprite_offset
             draw_x = int(self.x - offset_x)
             draw_y = int(self.y - offset_y)
             screen.blit(self.sprite_surf, (draw_x, draw_y))
         else:
-            # fallback shape
             pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
         
-        # 2. Draw the collision circle on top (optional debug)
         debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
         if debug_collisions:
-            # A thin red circle outline, width=1
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
+
+    def is_shielded(self):
+        return "shield" in self.active_powerups
+
+    def apply_powerup(self, ptype, custom_duration):
+        """Apply or refresh powerup with a custom duration (already adjusted by rarity)."""
+        now = pygame.time.get_ticks()
+        end_time = now + custom_duration
+        self.active_powerups[ptype] = end_time
 
 
 class Bullet:
@@ -183,7 +199,6 @@ class Bullet:
         self.color = color
         self.from_player = from_player
 
-        # Optional: use separate sprite for bullet
         if from_player:
             self.sprite_key = "player_bullet"
         else:
@@ -207,10 +222,8 @@ class Bullet:
         else:
             pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
             
-        # 2. Draw the collision circle on top (optional debug)
         debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
         if debug_collisions:
-            # A thin red circle outline, width=1
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
@@ -231,7 +244,6 @@ class Enemy:
         self.speed = speed
         self.difficulty = difficulty
 
-        # Sprites
         self.sprite_key = "enemy_ship"
         if self.sprite_key in loaded_sprites:
             self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
@@ -241,10 +253,8 @@ class Enemy:
             self.sprite_offset = (self.radius, self.radius)
 
     def update(self, bullets, player):
-        # Move downward
         self.y += self.speed
 
-        # Fire bullets
         now = pygame.time.get_ticks()
         if now - self.last_shot_time >= self.fire_delay:
             bullet_conf = config["bullet"]
@@ -268,10 +278,9 @@ class Enemy:
             screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
         else:
             pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
-        # 2. Draw the collision circle on top (optional debug)
+        
         debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
         if debug_collisions:
-            # A thin red circle outline, width=1
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
@@ -281,8 +290,6 @@ class Enemy:
 class Obstacle:
     def __init__(self):
         o = config["obstacle"]
-        
-        # 1) Determine collision circle radius
         self.radius = random.randint(o["radius_min"], o["radius_max"])
         self.color = tuple(o["color"])
         self.health = o["initial_health"]
@@ -291,24 +298,15 @@ class Obstacle:
         self.speed = random.uniform(o["speed_min"], o["speed_max"])
         self.collision_damage = o["collision_damage"]
 
-        # 2) Load the sprite from your global 'loaded_sprites' dict.
         self.sprite_key = "obstacle"
         info = loaded_sprites.get(self.sprite_key)
         if info:
-            # The base surface from config (possibly already scaled from settings.json)
             base_surf = info["surface"]
-
-            # 3) Override the sprite scale to match the collision circle.
-            #    The final sprite size should be diameter x diameter => (2*radius, 2*radius).
             new_width = 2 * self.radius
             new_height = 2 * self.radius
             self.sprite_surf = pygame.transform.scale(base_surf, (new_width, new_height))
-
-            # 4) Offset so the sprite is centered around (self.x, self.y).
-            #    i.e., if the sprite is 2*radius wide, half of that is 'radius'.
             self.sprite_offset = (self.radius, self.radius)
         else:
-            # Fallback if sprite not found
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
 
@@ -320,10 +318,8 @@ class Obstacle:
             offset_x, offset_y = self.sprite_offset
             screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
         else:
-            # Fallback: draw a circle if no sprite
             pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
 
-        # Optional: debug collision circle
         debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
         if debug_collisions:
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
@@ -343,7 +339,6 @@ class HealthPickup:
         self.speed = random.uniform(p["speed_min"], p["speed_max"])
         self.restore_amount = p["restore_amount"]
 
-        # Sprites
         self.sprite_key = "health_pickup"
         if self.sprite_key in loaded_sprites:
             self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
@@ -361,23 +356,117 @@ class HealthPickup:
             screen.blit(self.sprite_surf, (int(self.x - offset_x), int(self.y - offset_y)))
         else:
             pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
-        # 2. Draw the collision circle on top (optional debug)
+        
         debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
         if debug_collisions:
-            # A thin red circle outline, width=1
             pygame.draw.circle(screen, (255, 0, 0), (int(self.x), int(self.y)), self.radius, width=1)
 
     def off_screen(self):
         return (self.y > WIN_HEIGHT + self.radius)
+
+
+###############################################################################
+# NEW CLASS: POWERUP (with RARITY)
+###############################################################################
+class Powerup:
+    """Generic powerup that has a type (speed_boost, shield, etc.) and a random rarity 
+       (common/uncommon/rare) that changes its duration and outlines it in a special color."""
+    def __init__(self, ptype):
+        self.ptype = ptype
+        pconf = config["powerups"][ptype]
+
+        # We'll store the base duration from JSON
+        self.base_duration = pconf["duration"]
+        self.color = tuple(pconf.get("color", [255, 255, 255]))
+
+        # Pick a rarity from config["powerups"]["rarities"]
+        self.rarity = self.pick_rarity()
+
+        # Multiply the base duration by the rarity's multiplier
+        rar_conf = config["powerups"]["rarities"][self.rarity]
+        self.duration = int(self.base_duration * rar_conf["duration_multiplier"])
+        self.outline_color = tuple(rar_conf["outline_color"])
+        self.outline_thickness = rar_conf["outline_thickness"]
+
+        # We'll use a default radius or store in config if you prefer
+        self.radius = 16
+
+        # Attempt to load the sprite from pconf["sprite_path"], if it exists
+        path = pconf.get("sprite_path", "")
+        self.sprite_surf = None
+        self.sprite_offset = (self.radius, self.radius)
+
+        if path and os.path.isfile(path):
+            surf = pygame.image.load(path).convert_alpha()
+            # Scale to diameter if desired
+            diameter = 2 * self.radius
+            self.sprite_surf = pygame.transform.scale(surf, (diameter, diameter))
+        else:
+            # Fallback: we will draw a circle in draw() if no sprite is found
+            pass
+
+        # Position from top
+        self.x = random.randint(self.radius, WIN_WIDTH - self.radius)
+        self.y = -self.radius
+        # Random falling speed
+        self.speed = random.uniform(1.0, 2.0)
+
+    def pick_rarity(self):
+        """Selects a rarity based on the 'weight' of each tier (common/uncommon/rare)."""
+        rarities = config["powerups"]["rarities"]
+        c_weight = rarities["common"]["weight"]
+        u_weight = rarities["uncommon"]["weight"]
+        r_weight = rarities["rare"]["weight"]
+        total = c_weight + u_weight + r_weight
+        roll = random.random() * total
+
+        if roll < c_weight:
+            return "common"
+        roll -= c_weight
+        if roll < u_weight:
+            return "uncommon"
+        return "rare"
+
+    def update(self):
+        self.y += self.speed
+
+    def draw(self, screen):
+        """Draw the rarity outline first, then the powerup (sprite or fallback circle)."""
+        cx = int(self.x)
+        cy = int(self.y)
+
+        # 1) Draw an outline circle for rarity
+        pygame.draw.circle(
+            screen, 
+            self.outline_color, 
+            (cx, cy), 
+            self.radius + self.outline_thickness
+        )
+
+        # 2) Draw main sprite or fallback circle on top
+        if self.sprite_surf:
+            # Center the sprite
+            screen.blit(self.sprite_surf, (cx - self.radius, cy - self.radius))
+        else:
+            # fallback circle
+            pygame.draw.circle(screen, self.color, (cx, cy), self.radius)
+
+        # Optional debug collision circle
+        debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
+        if debug_collisions:
+            pygame.draw.circle(screen, (255, 0, 0), (cx, cy), self.radius, width=1)
+
+    def off_screen(self):
+        return (self.y > WIN_HEIGHT + self.radius)
+
 
 ###############################################################################
 # MAIN GAME CLASS
 ###############################################################################
 class Game:
     def __init__(self):
-        
         self.screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-        pygame.display.set_caption("Starfield Storm w/ Sprites & JSON Settings")
+        pygame.display.set_caption("Starfield Storm w/ Rarity-based Timed Powerups")
         self.clock = pygame.time.Clock()
         self.running = True
         self.state = "MENU"
@@ -387,6 +476,7 @@ class Game:
         self.enemies = []
         self.obstacles = []
         self.pickups = []
+        self.powerups = []
 
         self.score = 0
 
@@ -396,7 +486,7 @@ class Game:
         self.wave_interval_decrement = diff_conf["wave_interval_decrement_ms"]
         self.last_wave_time = pygame.time.get_ticks()
 
-        # For starfield background
+        # Starfield
         self.stars = [
             (random.randint(0, WIN_WIDTH), random.randint(0, WIN_HEIGHT))
             for _ in range(100)
@@ -415,14 +505,9 @@ class Game:
 
     def menu_loop(self):
         self.screen.fill(COLOR_BLACK)
-        self.draw_text("STARFIELD STORM (Sprites & JSON)", 50, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 90, COLOR_WHITE)
+        self.draw_text("STARFIELD STORM + Rarity Powerups", 50, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 90, COLOR_WHITE)
         self.draw_text("Press [SPACE] to START or [Q] to QUIT", 24, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 40, COLOR_WHITE)
-
-        # Controls explanation:
-        self.draw_text("CONTROLS:", 24, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 10, COLOR_WHITE)
-        self.draw_text("Move the mouse to steer your ship (speed limited).", 20, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 40, COLOR_WHITE)
-        self.draw_text("Ship fires automatically. Avoid enemies & obstacles.", 20, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 65, COLOR_WHITE)
-        self.draw_text("Collect pink orbs to restore health.", 20, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 90, COLOR_WHITE)
+        self.draw_text("Collect different rarities for extended durations!", 20, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 10, COLOR_WHITE)
 
         pygame.display.flip()
 
@@ -459,14 +544,12 @@ class Game:
             if event.type == pygame.QUIT:
                 self.running = False
 
-        # Update background starfield
         self.update_stars()
 
-        # Update player
         self.player.update()
         self.player.shoot(self.bullets)
 
-        # Difficulty scale
+        # Difficulty scaling
         diff_conf = config["difficulty"]
         elapsed_time = pygame.time.get_ticks()
         difficulty = (elapsed_time // diff_conf["time_scale_ms"])
@@ -477,6 +560,8 @@ class Game:
             self.spawn_enemies(difficulty)
             self.spawn_obstacles(difficulty)
             self.spawn_health_pickups()
+            self.spawn_powerups() 
+
             self.last_wave_time = elapsed_time
             self.wave_interval = max(self.wave_interval_min, self.wave_interval - self.wave_interval_decrement)
 
@@ -504,14 +589,20 @@ class Game:
             if p.off_screen():
                 self.pickups.remove(p)
 
-        # Collision detection
+        # Update powerups
+        for pw in self.powerups[:]:
+            pw.update()
+            if pw.off_screen():
+                self.powerups.remove(pw)
+
+        # Collisions
         self.handle_collisions()
 
         # Check game over
         if self.player.health <= 0:
             self.state = "GAME_OVER"
 
-        # Draw all
+        # Draw
         self.draw_game()
         pygame.display.flip()
 
@@ -519,7 +610,6 @@ class Game:
         diff_conf = config["difficulty"]
         enemy_count = 1 + int(difficulty * diff_conf["enemy_spawn_factor"])
         e_conf = config["enemy"]
-
         for _ in range(enemy_count):
             x = random.randint(20, WIN_WIDTH - 20)
             y = -30
@@ -537,11 +627,21 @@ class Game:
         if random.random() < diff_conf["pickup_chance"]:
             self.pickups.append(HealthPickup())
 
+    def spawn_powerups(self):
+        # For each powerup type (except the "rarities" key), roll its spawn chance
+        pw_conf = config.get("powerups", {})
+        for ptype, info in pw_conf.items():
+            if ptype == "rarities":
+                continue  # skip the 'rarities' definition
+            chance = info.get("spawn_chance", 0.0)
+            if random.random() < chance:
+                self.powerups.append(Powerup(ptype))
+
     def handle_collisions(self):
         bullet_conf = config["bullet"]
         enemy_bullet_damage = bullet_conf["enemy_bullet_damage"]
 
-        # Bullets vs Enemies
+        # Bullets vs Enemies/Obstacles
         for b in self.bullets[:]:
             if b.from_player:
                 for e in self.enemies[:]:
@@ -553,35 +653,39 @@ class Game:
                         if b in self.bullets:
                             self.bullets.remove(b)
                         break
-                for o in self.obstacles[:]:
-                    if self.distance(b.x, b.y, o.x, o.y) < (b.radius + o.radius):
-                        o.health -= 1
-                        if o.health <= 0:
-                            self.obstacles.remove(o)
-                            self.score += 10
-                        if b in self.bullets:
-                            self.bullets.remove(b)
-                        break
+                else:
+                    for o in self.obstacles[:]:
+                        if self.distance(b.x, b.y, o.x, o.y) < (b.radius + o.radius):
+                            o.health -= 1
+                            if o.health <= 0:
+                                self.obstacles.remove(o)
+                                self.score += 10
+                            if b in self.bullets:
+                                self.bullets.remove(b)
+                            break
 
         # Enemy bullets vs Player
         for b in self.bullets[:]:
             if not b.from_player:
                 if self.distance(b.x, b.y, self.player.x, self.player.y) < (b.radius + self.player.radius):
-                    self.player.health -= enemy_bullet_damage
+                    if not self.player.is_shielded():
+                        self.player.health -= enemy_bullet_damage
                     if b in self.bullets:
                         self.bullets.remove(b)
 
         # Obstacles vs Player
         for o in self.obstacles[:]:
             if self.distance(o.x, o.y, self.player.x, self.player.y) < (o.radius + self.player.radius):
-                self.player.health -= o.collision_damage
+                if not self.player.is_shielded():
+                    self.player.health -= o.collision_damage
                 if o in self.obstacles:
                     self.obstacles.remove(o)
 
         # Enemies vs Player
         for e in self.enemies[:]:
             if self.distance(e.x, e.y, self.player.x, self.player.y) < (e.radius + self.player.radius):
-                self.player.health -= self.player.collision_with_enemy_damage
+                if not self.player.is_shielded():
+                    self.player.health -= self.player.collision_with_enemy_damage
                 if e in self.enemies:
                     self.enemies.remove(e)
 
@@ -589,8 +693,27 @@ class Game:
         for p in self.pickups[:]:
             if self.distance(p.x, p.y, self.player.x, self.player.y) < (p.radius + self.player.radius):
                 self.player.health += p.restore_amount
-                self.player.health = min(self.player.health, config["player"]["initial_health"])
+                max_hp = config["player"]["initial_health"]
+                self.player.health = min(self.player.health, max_hp)
                 self.pickups.remove(p)
+
+        # Powerups vs Player
+        for pw in self.powerups[:]:
+            if self.distance(pw.x, pw.y, self.player.x, self.player.y) < (pw.radius + self.player.radius):
+                ptype = pw.ptype
+                # pass the RARITY-adjusted duration to the player
+                self.player.apply_powerup(ptype, pw.duration)
+
+                # If nuke, kill all enemies & obstacles
+                if ptype == "nuke":
+                    for e in self.enemies:
+                        self.score += 10
+                    for o in self.obstacles:
+                        self.score += 10
+                    self.enemies.clear()
+                    self.obstacles.clear()
+
+                self.powerups.remove(pw)
 
     def distance(self, x1, y1, x2, y2):
         return math.hypot(x2 - x1, y2 - y1)
@@ -607,7 +730,7 @@ class Game:
 
     def draw_game(self):
         self.screen.fill(COLOR_BLACK)
-        # Draw starfield
+        # Starfield
         for (sx, sy) in self.stars:
             pygame.draw.circle(self.screen, COLOR_WHITE, (sx, sy), 2)
 
@@ -625,6 +748,9 @@ class Game:
         # Pickups
         for p in self.pickups:
             p.draw(self.screen)
+        # Powerups
+        for pw in self.powerups:
+            pw.draw(self.screen)
 
         # UI
         self.draw_text(f"Score: {int(self.score)}", 24, 50, 20, COLOR_WHITE, align="left")
@@ -646,6 +772,7 @@ class Game:
         self.enemies = []
         self.obstacles = []
         self.pickups = []
+        self.powerups = []
         self.score = 0
 
         diff_conf = config["difficulty"]
