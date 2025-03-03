@@ -95,14 +95,14 @@
 
     "powerups": {
       "speed_boost": {
-        "spawn_chance": 0.05,
+        "spawn_chance": 0.5,
         "duration": 5000,
         "speed_multiplier": 2.0,
         "color": [0, 255, 255],
         "sprite_path": ""  
       },
       "spread_shot": {
-        "spawn_chance": 0.03,
+        "spawn_chance": 0.5,
         "duration": 5000,
         "bullet_count": 3,
         "angle_degrees": 15,
@@ -110,21 +110,21 @@
         "sprite_path": ""
       },
       "rapid_fire": {
-        "spawn_chance": 0.02,
+        "spawn_chance": 0.5,
         "duration": 5000,
         "fire_delay_factor": 0.3,
         "color": [255, 255, 0],
         "sprite_path": ""
       },
       "shield": {
-        "spawn_chance": 0.02,
+        "spawn_chance": 0.5,
         "duration": 5000,
         "damage_reduction": 1.0,
         "color": [0, 128, 255],
         "sprite_path": ""
       },
       "nuke": {
-        "spawn_chance": 0.01,
+        "spawn_chance": 0.1,
         "duration": 1000,
         "color": [255, 0, 255],
         "sprite_path": ""
@@ -135,19 +135,19 @@
           "weight": 0.7,
           "duration_multiplier": 1.0,
           "outline_color": [180, 180, 180],
-          "outline_thickness": 2
+          "outline_thickness": 4
         },
         "uncommon": {
           "weight": 0.25,
           "duration_multiplier": 2.0,
           "outline_color": [0, 255, 0],
-          "outline_thickness": 2
+          "outline_thickness": 8
         },
         "rare": {
           "weight": 0.05,
           "duration_multiplier": 5.0,
           "outline_color": [255, 0, 0],
-          "outline_thickness": 3
+          "outline_thickness": 15
         }
       }
     }
