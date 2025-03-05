@@ -22,6 +22,28 @@ COLOR_WHITE = tuple(config["colors"]["WHITE"])
 pygame.init()
 pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
 
+
+pygame.mixer.init()
+
+bg_music_path = config.get("audio", {}).get("bg_music_path", "")
+sound_effects_config = config.get("audio", {}).get("effects", {})
+
+# Load SFX into a dictionary
+sound_effects = {}
+for sfx_name, sfx_path in sound_effects_config.items():
+    if os.path.isfile(sfx_path):
+        sound_effects[sfx_name] = pygame.mixer.Sound(sfx_path)
+    else:
+        sound_effects[sfx_name] = None
+        print(f"Warning: Sound effect file {sfx_path} not found for '{sfx_name}'")
+
+# Optional: load & loop background music
+# if bg_music_path and os.path.isfile(bg_music_path):
+#     pygame.mixer.music.load(bg_music_path)
+#     pygame.mixer.music.play(-1)
+# else:
+#     print("Warning: No valid background music path provided.")
+
 ###############################################################################
 # SPRITE LOADING
 ###############################################################################
@@ -32,8 +54,10 @@ def load_sprites_from_config(sprite_conf):
         path = info.get("path", "")
         scale = info.get("scale", [32, 32])
         offset = info.get("offset", [16, 16])
+        z_order = info.get("z_order", 0)  # <-- NEW: read z_order
 
         if path and os.path.isfile(path):
+            # Use convert_alpha() for transparency
             surf = pygame.image.load(path).convert_alpha()
             if scale:
                 w, h = scale
@@ -47,7 +71,8 @@ def load_sprites_from_config(sprite_conf):
 
         loaded[sprite_name] = {
             "surface": surf,
-            "offset": tuple(offset)
+            "offset": tuple(offset),
+            "z_order": z_order   # <-- store z_order in dict
         }
     return loaded
 
@@ -80,11 +105,14 @@ class Player:
         # Sprites
         self.sprite_key = "player_ship"
         if self.sprite_key in loaded_sprites:
-            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
-            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+            data = loaded_sprites[self.sprite_key]
+            self.sprite_surf = data["surface"]
+            self.sprite_offset = data["offset"]
+            self.z_order = data["z_order"]  # <-- store sprite's z_order
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
+            self.z_order = 0
 
     def update(self):
         """Move player and handle powerup expirations."""
@@ -163,6 +191,9 @@ class Player:
                     from_player=True
                 ))
 
+            if sound_effects.get("shoot"):
+                sound_effects["shoot"].play()
+
             self.last_shot_time = now
 
     def draw(self, screen):
@@ -205,11 +236,14 @@ class Bullet:
             self.sprite_key = "enemy_bullet"
 
         if self.sprite_key in loaded_sprites:
-            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
-            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+            data = loaded_sprites[self.sprite_key]
+            self.sprite_surf = data["surface"]
+            self.sprite_offset = data["offset"]
+            self.z_order = data["z_order"]  # <--
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
+            self.z_order = 0
 
     def update(self):
         self.x += self.dx
@@ -246,11 +280,14 @@ class Enemy:
 
         self.sprite_key = "enemy_ship"
         if self.sprite_key in loaded_sprites:
-            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
-            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+            data = loaded_sprites[self.sprite_key]
+            self.sprite_surf = data["surface"]
+            self.sprite_offset = data["offset"]
+            self.z_order = data["z_order"]  # <--
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
+            self.z_order = 0
 
     def update(self, bullets, player):
         self.y += self.speed
@@ -306,9 +343,11 @@ class Obstacle:
             new_height = 2 * self.radius
             self.sprite_surf = pygame.transform.scale(base_surf, (new_width, new_height))
             self.sprite_offset = (self.radius, self.radius)
+            self.z_order = info["z_order"]  # <--
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
+            self.z_order = 0
 
     def update(self):
         self.y += self.speed
@@ -341,11 +380,14 @@ class HealthPickup:
 
         self.sprite_key = "health_pickup"
         if self.sprite_key in loaded_sprites:
-            self.sprite_surf = loaded_sprites[self.sprite_key]["surface"]
-            self.sprite_offset = loaded_sprites[self.sprite_key]["offset"]
+            data = loaded_sprites[self.sprite_key]
+            self.sprite_surf = data["surface"]
+            self.sprite_offset = data["offset"]
+            self.z_order = data["z_order"]  # <--
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
+            self.z_order = 0
 
     def update(self):
         self.y += self.speed
@@ -411,6 +453,9 @@ class Powerup:
         # Random falling speed
         self.speed = random.uniform(1.0, 2.0)
 
+        # If you want to have a separate z_order for powerups, you can set it here:
+        self.z_order = 3  # For example, to place them behind bullets but above other objects
+
     def pick_rarity(self):
         """Selects a rarity based on the 'weight' of each tier (common/uncommon/rare)."""
         rarities = config["powerups"]["rarities"]
@@ -466,7 +511,7 @@ class Powerup:
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-        pygame.display.set_caption("Starfield Storm w/ Rarity-based Timed Powerups")
+        pygame.display.set_caption("Starfield Storm w/ Rarity-based Timed Powerups + z_order")
         self.clock = pygame.time.Clock()
         self.running = True
         self.state = "MENU"
@@ -560,7 +605,7 @@ class Game:
             self.spawn_enemies(difficulty)
             self.spawn_obstacles(difficulty)
             self.spawn_health_pickups()
-            self.spawn_powerups() 
+            self.spawn_powerups()
 
             self.last_wave_time = elapsed_time
             self.wave_interval = max(self.wave_interval_min, self.wave_interval - self.wave_interval_decrement)
@@ -602,7 +647,7 @@ class Game:
         if self.player.health <= 0:
             self.state = "GAME_OVER"
 
-        # Draw
+        # Draw everything
         self.draw_game()
         pygame.display.flip()
 
@@ -730,29 +775,34 @@ class Game:
 
     def draw_game(self):
         self.screen.fill(COLOR_BLACK)
-        # Starfield
+
+        # 1) Draw starfield behind everything
         for (sx, sy) in self.stars:
             pygame.draw.circle(self.screen, COLOR_WHITE, (sx, sy), 2)
 
-        # Player
-        self.player.draw(self.screen)
-        # Bullets
-        for b in self.bullets:
-            b.draw(self.screen)
-        # Enemies
-        for e in self.enemies:
-            e.draw(self.screen)
-        # Obstacles
-        for o in self.obstacles:
-            o.draw(self.screen)
-        # Pickups
-        for p in self.pickups:
-            p.draw(self.screen)
-        # Powerups
-        for pw in self.powerups:
-            pw.draw(self.screen)
+        # 2) Gather all game objects with their z_order
+        to_draw = []
+        to_draw.append((self.player.z_order, self.player))
 
-        # UI
+        for b in self.bullets:
+            to_draw.append((b.z_order, b))
+        for e in self.enemies:
+            to_draw.append((e.z_order, e))
+        for o in self.obstacles:
+            to_draw.append((o.z_order, o))
+        for p in self.pickups:
+            to_draw.append((p.z_order, p))
+        for pw in self.powerups:
+            to_draw.append((pw.z_order, pw))
+
+        # 3) Sort them by z_order
+        to_draw.sort(key=lambda x: x[0])
+
+        # 4) Draw in sorted order
+        for (_, obj) in to_draw:
+            obj.draw(self.screen)
+
+        # 5) Draw UI on top
         self.draw_text(f"Score: {int(self.score)}", 24, 50, 20, COLOR_WHITE, align="left")
         self.draw_text(f"Health: {self.player.health}", 24, WIN_WIDTH - 150, 20, COLOR_WHITE, align="left")
 

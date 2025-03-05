@@ -1,155 +1,180 @@
 {
-    "window": {
-      "width": 1920,
-      "height": 1080,
-      "fps": 60
+  "window": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 60
+  },
+  "colors": {
+    "WHITE": [255, 255, 255],
+    "BLACK": [0, 0, 0]
+  },
+  "player": {
+    "radius": 30,
+    "initial_health": 150,
+    "fire_delay_ms": 400,
+    "max_speed": 4,
+    "color": [0, 255, 0],
+    "collision_with_enemy_damage": 10
+  },
+  "bullet": {
+    "radius": 10,
+    "player_bullet_speed_y": -6,
+    "player_bullet_color": [255, 255, 255],
+    "enemy_bullet_color": [255, 0, 0],
+    "enemy_bullet_base_speed": 2.0,
+    "enemy_bullet_damage": 5
+  },
+  "enemy": {
+    "radius": 45,
+    "initial_health": 3,
+    "base_speed": 1.0,
+    "fire_delay_ms": 1000,
+    "color": [0, 100, 255]
+  },
+  "obstacle": {
+    "radius_min": 20,
+    "initial_health": 5,
+    "radius_max": 25,
+    "speed_min": 1.0,
+    "speed_max": 2.5,
+    "color": [128, 128, 128],
+    "collision_damage": 15
+  },
+  "pickup": {
+    "radius": 20,
+    "speed_min": 1.0,
+    "speed_max": 2.0,
+    "color": [255, 192, 203],
+    "restore_amount": 25
+  },
+  "difficulty": {
+    "time_scale_ms": 20000,
+    "wave_interval_start_ms": 2500,
+    "wave_interval_min_ms": 800,
+    "wave_interval_decrement_ms": 5,
+    "enemy_spawn_factor": 0.5,
+    "obstacle_spawn_factor": 6,
+    "pickup_chance": 0.2
+  },
+    
+  "sprites": {
+    "player_ship": {
+      "path": "assets/player_ship.png",
+      "scale": [64, 64],
+      "offset": [32, 32],
+      "z_order": 11
     },
-    "colors": {
-      "WHITE": [255, 255, 255],
-      "BLACK": [0, 0, 0]
-    },
-    "player": {
-      "radius": 30,
-      "initial_health": 150,
-      "fire_delay_ms": 200,
-      "max_speed": 8,
-      "color": [0, 255, 0],
-      "collision_with_enemy_damage": 10
-    },
-    "bullet": {
-      "radius": 10,
-      "player_bullet_speed_y": -10,
-      "player_bullet_color": [255, 255, 255],
-      "enemy_bullet_color": [255, 0, 0],
-      "enemy_bullet_base_speed": 3.0,
-      "enemy_bullet_damage": 5
-    },
-    "enemy": {
-      "radius": 45,
-      "initial_health": 3,
-      "base_speed": 1.0,
-      "fire_delay_ms": 1000,
-      "color": [0, 100, 255]
+    "enemy_ship": {
+      "path": "assets/enemy_ship.png",
+      "scale": [64, 64],
+      "offset": [32, 32],
+      "z_order": 5
     },
     "obstacle": {
-      "radius_min": 20,
-      "initial_health": 5,
-      "radius_max": 25,
-      "speed_min": 1.0,
-      "speed_max": 2.5,
-      "color": [128, 128, 128],
-      "collision_damage": 15
+      "path": "assets/asteroid.png",
+      "scale": [64, 64],
+      "offset": [32, 32],
+      "z_order": 4
     },
-    "pickup": {
-      "radius": 20,
-      "speed_min": 1.0,
-      "speed_max": 2.0,
-      "color": [255, 192, 203],
-      "restore_amount": 25
+    "health_pickup": {
+      "path": "assets/health_orb.png",
+      "scale": [64, 64],
+      "offset": [32, 32],
+      "z_order": 2
     },
-    "difficulty": {
-      "time_scale_ms": 20000,
-      "wave_interval_start_ms": 2500,
-      "wave_interval_min_ms": 800,
-      "wave_interval_decrement_ms": 5,
-      "enemy_spawn_factor": 0.5,
-      "obstacle_spawn_factor": 6,
-      "pickup_chance": 0.2
+    "player_bullet": {
+      "path": "assets/bullet_player.png",
+      "scale": [64, 64],
+      "offset": [32, 32],
+      "z_order": 10
     },
-    
-    "sprites": {
-      "player_ship": {
-        "path": "assets/player_ship.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
-      },
-      "enemy_ship": {
-        "path": "assets/enemy_ship.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
-      },
-      "obstacle": {
-        "path": "assets/asteroid.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
-      },
-      "health_pickup": {
-        "path": "assets/health_orb.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
-      },
-      "player_bullet": {
-        "path": "assets/bullet_player.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
-      },
-      "enemy_bullet": {
-        "path": "assets/bullet_enemy.png",
-        "scale": [64, 64],
-        "offset": [32, 32]
-      }
-    },
-    "debug": {
-        "show_collision_circles": false
-    },
+    "enemy_bullet": {
+      "path": "assets/bullet_enemy.png",
+      "scale": [64, 64],
+      "offset": [32, 32],
+      "z_order": 6
+    }
+  },
+  "debug": {
+      "show_collision_circles": false
+  },
 
-    "powerups": {
-      "speed_boost": {
-        "spawn_chance": 0.5,
-        "duration": 5000,
-        "speed_multiplier": 2.0,
-        "color": [0, 255, 255],
-        "sprite_path": ""  
+  "powerups": {
+    "speed_boost": {
+      "spawn_chance": 0.5,
+      "duration": 5000,
+      "speed_multiplier": 2.0,
+      "color": [0, 255, 255],
+      "sprite_path": ""  
+    },
+    "spread_shot": {
+      "spawn_chance": 0.5,
+      "duration": 5000,
+      "bullet_count": 3,
+      "angle_degrees": 15,
+      "color": [255, 128, 0],
+      "sprite_path": ""
+    },
+    "rapid_fire": {
+      "spawn_chance": 0.5,
+      "duration": 5000,
+      "fire_delay_factor": 0.3,
+      "color": [255, 255, 0],
+      "sprite_path": ""
+    },
+    "shield": {
+      "spawn_chance": 0.5,
+      "duration": 5000,
+      "damage_reduction": 1.0,
+      "color": [0, 128, 255],
+      "sprite_path": ""
+    },
+    "nuke": {
+      "spawn_chance": 0.1,
+      "duration": 1000,
+      "color": [255, 0, 255],
+      "sprite_path": ""
+    },
+    "rarities": {
+      "common": {
+        "weight": 0.7,
+        "duration_multiplier": 1.0,
+        "outline_color": [180, 180, 180],
+        "outline_thickness": 4
       },
-      "spread_shot": {
-        "spawn_chance": 0.5,
-        "duration": 5000,
-        "bullet_count": 3,
-        "angle_degrees": 15,
-        "color": [255, 128, 0],
-        "sprite_path": ""
+      "uncommon": {
+        "weight": 0.25,
+        "duration_multiplier": 2.0,
+        "outline_color": [0, 255, 0],
+        "outline_thickness": 8
       },
-      "rapid_fire": {
-        "spawn_chance": 0.5,
-        "duration": 5000,
-        "fire_delay_factor": 0.3,
-        "color": [255, 255, 0],
-        "sprite_path": ""
-      },
-      "shield": {
-        "spawn_chance": 0.5,
-        "duration": 5000,
-        "damage_reduction": 1.0,
-        "color": [0, 128, 255],
-        "sprite_path": ""
-      },
-      "nuke": {
-        "spawn_chance": 0.1,
-        "duration": 1000,
-        "color": [255, 0, 255],
-        "sprite_path": ""
-      },
-    
-      "rarities": {
-        "common": {
-          "weight": 0.7,
-          "duration_multiplier": 1.0,
-          "outline_color": [180, 180, 180],
-          "outline_thickness": 4
-        },
-        "uncommon": {
-          "weight": 0.25,
-          "duration_multiplier": 2.0,
-          "outline_color": [0, 255, 0],
-          "outline_thickness": 8
-        },
-        "rare": {
-          "weight": 0.05,
-          "duration_multiplier": 5.0,
-          "outline_color": [255, 0, 0],
-          "outline_thickness": 15
-        }
+      "rare": {
+        "weight": 0.05,
+        "duration_multiplier": 5.0,
+        "outline_color": [255, 0, 0],
+        "outline_thickness": 15
       }
     }
+  },
+
+  "audio": {
+    "bg_music_path": "assets/music/Music_StarfieldStorm_Loop_01.wav",
+    "effects": {
+      "shoot": "assets/sounds/laser_shot.wav",
+
+      "player_hit": "assets/sounds/player_hit.wav",
+      "player_die": "assets/sounds/player_die.wav",
+
+      "enemy_hit": "assets/sounds/enemy_hit.wav",
+      "enemy_die": "assets/sounds/enemy_die.wav",
+
+      "obstacle_hit_player": "assets/sounds/obstacle_hit_player.wav",
+
+      "powerup_speed_boost": "assets/sounds/powerup_speed_boost.wav",
+      "powerup_spread_shot": "assets/sounds/powerup_spread_shot.wav",
+      "powerup_rapid_fire": "assets/sounds/powerup_rapid_fire.wav",
+      "powerup_shield": "assets/sounds/powerup_shield.wav",
+      "powerup_nuke": "assets/sounds/powerup_nuke.wav"
+    }
   }
-  
+}
