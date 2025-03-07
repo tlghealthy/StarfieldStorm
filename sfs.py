@@ -37,33 +37,30 @@ for sfx_name, sfx_path in sound_effects_config.items():
         sound_effects[sfx_name] = None
         print(f"Warning: Sound effect file {sfx_path} not found for '{sfx_name}'")
 
-# Optional: load & loop background music
-# if bg_music_path and os.path.isfile(bg_music_path):
-#     pygame.mixer.music.load(bg_music_path)
-#     pygame.mixer.music.play(-1)
-# else:
-#     print("Warning: No valid background music path provided.")
+# Loop background music if path is valid
+if bg_music_path and os.path.isfile(bg_music_path):
+    pygame.mixer.music.load(bg_music_path)
+    pygame.mixer.music.play(-1)  # loop forever
+else:
+    print("Warning: No valid background music path provided in settings.")
 
-###############################################################################
+# -----------------------------------------------------------------------------
 # SPRITE LOADING
-###############################################################################
+# -----------------------------------------------------------------------------
 def load_sprites_from_config(sprite_conf):
-    """Loads or creates fallback surfaces for your main sprites (player, enemy, etc.)."""
     loaded = {}
     for sprite_name, info in sprite_conf.items():
         path = info.get("path", "")
         scale = info.get("scale", [32, 32])
         offset = info.get("offset", [16, 16])
-        z_order = info.get("z_order", 0)  # <-- NEW: read z_order
+        z_order = info.get("z_order", 0)
 
         if path and os.path.isfile(path):
-            # Use convert_alpha() for transparency
             surf = pygame.image.load(path).convert_alpha()
             if scale:
                 w, h = scale
                 surf = pygame.transform.scale(surf, (w, h))
         else:
-            # Fallback: create a placeholder if file not found
             w, h = scale
             surf = pygame.Surface((w, h), pygame.SRCALPHA)
             surf.fill((255, 0, 255, 128))
@@ -72,16 +69,16 @@ def load_sprites_from_config(sprite_conf):
         loaded[sprite_name] = {
             "surface": surf,
             "offset": tuple(offset),
-            "z_order": z_order   # <-- store z_order in dict
+            "z_order": z_order
         }
     return loaded
 
 sprite_conf = config.get("sprites", {})
 loaded_sprites = load_sprites_from_config(sprite_conf)
 
-###############################################################################
+# -----------------------------------------------------------------------------
 # GAME CLASSES
-###############################################################################
+# -----------------------------------------------------------------------------
 class Player:
     def __init__(self):
         p = config["player"]
@@ -95,34 +92,28 @@ class Player:
         self.max_speed = p["max_speed"]
         self.collision_with_enemy_damage = p["collision_with_enemy_damage"]
 
-        # Save original values for reverting after powerups
         self.base_fire_delay = self.fire_delay
         self.base_max_speed = self.max_speed
 
-        # Track active powerups + their expiry times => {"speed_boost": 123456, ...}
         self.active_powerups = {}
 
-        # Sprites
         self.sprite_key = "player_ship"
         if self.sprite_key in loaded_sprites:
             data = loaded_sprites[self.sprite_key]
             self.sprite_surf = data["surface"]
             self.sprite_offset = data["offset"]
-            self.z_order = data["z_order"]  # <-- store sprite's z_order
+            self.z_order = data["z_order"]
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
             self.z_order = 0
 
     def update(self):
-        """Move player and handle powerup expirations."""
         self.handle_powerup_expiration()
-
         mouse_x, mouse_y = pygame.mouse.get_pos()
         dx = mouse_x - self.x
         dy = mouse_y - self.y
         dist = math.hypot(dx, dy)
-
         if dist > 0:
             if dist > self.max_speed:
                 scale = self.max_speed / dist
@@ -141,11 +132,9 @@ class Player:
         for ptype in expired:
             del self.active_powerups[ptype]
 
-        # Revert to base values
         self.fire_delay = self.base_fire_delay
         self.max_speed = self.base_max_speed
 
-        # Re-apply any active ones
         if "rapid_fire" in self.active_powerups:
             factor = config["powerups"]["rapid_fire"]["fire_delay_factor"]
             self.fire_delay = int(self.base_fire_delay * factor)
@@ -158,7 +147,10 @@ class Player:
         now = pygame.time.get_ticks()
         if now - self.last_shot_time >= self.fire_delay:
             bullet_conf = config["bullet"]
-            # Check for spread_shot
+            # Play shoot SFX if available
+            if sound_effects.get("shoot"):
+                sound_effects["shoot"].play()
+
             if "spread_shot" in self.active_powerups:
                 sconf = config["powerups"]["spread_shot"]
                 count = sconf["bullet_count"]
@@ -180,7 +172,6 @@ class Player:
                         from_player=True
                     ))
             else:
-                # Single bullet
                 bullet_speed = bullet_conf["player_bullet_speed_y"]
                 bullets.append(Bullet(
                     x=self.x,
@@ -190,10 +181,6 @@ class Player:
                     color=tuple(bullet_conf["player_bullet_color"]),
                     from_player=True
                 ))
-
-            if sound_effects.get("shoot"):
-                sound_effects["shoot"].play()
-
             self.last_shot_time = now
 
     def draw(self, screen):
@@ -213,7 +200,6 @@ class Player:
         return "shield" in self.active_powerups
 
     def apply_powerup(self, ptype, custom_duration):
-        """Apply or refresh powerup with a custom duration (already adjusted by rarity)."""
         now = pygame.time.get_ticks()
         end_time = now + custom_duration
         self.active_powerups[ptype] = end_time
@@ -239,7 +225,7 @@ class Bullet:
             data = loaded_sprites[self.sprite_key]
             self.sprite_surf = data["surface"]
             self.sprite_offset = data["offset"]
-            self.z_order = data["z_order"]  # <--
+            self.z_order = data["z_order"]
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
@@ -283,7 +269,7 @@ class Enemy:
             data = loaded_sprites[self.sprite_key]
             self.sprite_surf = data["surface"]
             self.sprite_offset = data["offset"]
-            self.z_order = data["z_order"]  # <--
+            self.z_order = data["z_order"]
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
@@ -343,7 +329,7 @@ class Obstacle:
             new_height = 2 * self.radius
             self.sprite_surf = pygame.transform.scale(base_surf, (new_width, new_height))
             self.sprite_offset = (self.radius, self.radius)
-            self.z_order = info["z_order"]  # <--
+            self.z_order = info["z_order"]
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
@@ -368,7 +354,6 @@ class Obstacle:
 
 
 class HealthPickup:
-    """Floating item that restores some health if collected by the player."""
     def __init__(self):
         p = config["pickup"]
         self.radius = p["radius"]
@@ -383,7 +368,7 @@ class HealthPickup:
             data = loaded_sprites[self.sprite_key]
             self.sprite_surf = data["surface"]
             self.sprite_offset = data["offset"]
-            self.z_order = data["z_order"]  # <--
+            self.z_order = data["z_order"]
         else:
             self.sprite_surf = None
             self.sprite_offset = (self.radius, self.radius)
@@ -407,64 +392,41 @@ class HealthPickup:
         return (self.y > WIN_HEIGHT + self.radius)
 
 
-###############################################################################
-# NEW CLASS: POWERUP (with RARITY)
-###############################################################################
 class Powerup:
-    """Generic powerup that has a type (speed_boost, shield, etc.) and a random rarity 
-       (common/uncommon/rare) that changes its duration and outlines it in a special color."""
     def __init__(self, ptype):
         self.ptype = ptype
         pconf = config["powerups"][ptype]
-
-        # We'll store the base duration from JSON
         self.base_duration = pconf["duration"]
         self.color = tuple(pconf.get("color", [255, 255, 255]))
 
-        # Pick a rarity from config["powerups"]["rarities"]
         self.rarity = self.pick_rarity()
-
-        # Multiply the base duration by the rarity's multiplier
         rar_conf = config["powerups"]["rarities"][self.rarity]
         self.duration = int(self.base_duration * rar_conf["duration_multiplier"])
         self.outline_color = tuple(rar_conf["outline_color"])
         self.outline_thickness = rar_conf["outline_thickness"]
 
-        # We'll use a default radius or store in config if you prefer
         self.radius = 16
 
-        # Attempt to load the sprite from pconf["sprite_path"], if it exists
         path = pconf.get("sprite_path", "")
         self.sprite_surf = None
         self.sprite_offset = (self.radius, self.radius)
-
         if path and os.path.isfile(path):
             surf = pygame.image.load(path).convert_alpha()
-            # Scale to diameter if desired
             diameter = 2 * self.radius
             self.sprite_surf = pygame.transform.scale(surf, (diameter, diameter))
-        else:
-            # Fallback: we will draw a circle in draw() if no sprite is found
-            pass
 
-        # Position from top
         self.x = random.randint(self.radius, WIN_WIDTH - self.radius)
         self.y = -self.radius
-        # Random falling speed
         self.speed = random.uniform(1.0, 2.0)
-
-        # If you want to have a separate z_order for powerups, you can set it here:
-        self.z_order = 3  # For example, to place them behind bullets but above other objects
+        self.z_order = 3
 
     def pick_rarity(self):
-        """Selects a rarity based on the 'weight' of each tier (common/uncommon/rare)."""
         rarities = config["powerups"]["rarities"]
         c_weight = rarities["common"]["weight"]
         u_weight = rarities["uncommon"]["weight"]
         r_weight = rarities["rare"]["weight"]
         total = c_weight + u_weight + r_weight
         roll = random.random() * total
-
         if roll < c_weight:
             return "common"
         roll -= c_weight
@@ -476,27 +438,20 @@ class Powerup:
         self.y += self.speed
 
     def draw(self, screen):
-        """Draw the rarity outline first, then the powerup (sprite or fallback circle)."""
         cx = int(self.x)
         cy = int(self.y)
 
-        # 1) Draw an outline circle for rarity
         pygame.draw.circle(
             screen, 
             self.outline_color, 
             (cx, cy), 
             self.radius + self.outline_thickness
         )
-
-        # 2) Draw main sprite or fallback circle on top
         if self.sprite_surf:
-            # Center the sprite
             screen.blit(self.sprite_surf, (cx - self.radius, cy - self.radius))
         else:
-            # fallback circle
             pygame.draw.circle(screen, self.color, (cx, cy), self.radius)
 
-        # Optional debug collision circle
         debug_collisions = config.get("debug", {}).get("show_collision_circles", False)
         if debug_collisions:
             pygame.draw.circle(screen, (255, 0, 0), (cx, cy), self.radius, width=1)
@@ -504,14 +459,13 @@ class Powerup:
     def off_screen(self):
         return (self.y > WIN_HEIGHT + self.radius)
 
-
-###############################################################################
-# MAIN GAME CLASS
-###############################################################################
+# -----------------------------------------------------------------------------
+# MAIN GAME
+# -----------------------------------------------------------------------------
 class Game:
     def __init__(self):
         self.screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-        pygame.display.set_caption("Starfield Storm w/ Rarity-based Timed Powerups + z_order")
+        pygame.display.set_caption("Starfield Storm w/ Distinct Sound Effects")
         self.clock = pygame.time.Clock()
         self.running = True
         self.state = "MENU"
@@ -531,12 +485,11 @@ class Game:
         self.wave_interval_decrement = diff_conf["wave_interval_decrement_ms"]
         self.last_wave_time = pygame.time.get_ticks()
 
-        # Starfield
         self.stars = [
             (random.randint(0, WIN_WIDTH), random.randint(0, WIN_HEIGHT))
             for _ in range(100)
         ]
-    
+
     def run(self):
         while self.running:
             if self.state == "MENU":
@@ -550,10 +503,8 @@ class Game:
 
     def menu_loop(self):
         self.screen.fill(COLOR_BLACK)
-        self.draw_text("STARFIELD STORM + Rarity Powerups", 50, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 90, COLOR_WHITE)
+        self.draw_text("STARFIELD STORM + Distinct SFX", 50, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 90, COLOR_WHITE)
         self.draw_text("Press [SPACE] to START or [Q] to QUIT", 24, WIN_WIDTH // 2, WIN_HEIGHT // 2 - 40, COLOR_WHITE)
-        self.draw_text("Collect different rarities for extended durations!", 20, WIN_WIDTH // 2, WIN_HEIGHT // 2 + 10, COLOR_WHITE)
-
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -594,18 +545,17 @@ class Game:
         self.player.update()
         self.player.shoot(self.bullets)
 
-        # Difficulty scaling
         diff_conf = config["difficulty"]
         elapsed_time = pygame.time.get_ticks()
         difficulty = (elapsed_time // diff_conf["time_scale_ms"])
-        self.score += 0.03  # small passive score increment
+        self.score += 0.03
 
         # Wave spawn
         if elapsed_time - self.last_wave_time >= self.wave_interval:
             self.spawn_enemies(difficulty)
             self.spawn_obstacles(difficulty)
             self.spawn_health_pickups()
-            self.spawn_powerups()
+            self.spawn_powerups() 
 
             self.last_wave_time = elapsed_time
             self.wave_interval = max(self.wave_interval_min, self.wave_interval - self.wave_interval_decrement)
@@ -643,11 +593,13 @@ class Game:
         # Collisions
         self.handle_collisions()
 
-        # Check game over
         if self.player.health <= 0:
+            # Player DIES -> play sfx if available
+            if sound_effects.get("player_die"):
+                sound_effects["player_die"].play()
             self.state = "GAME_OVER"
 
-        # Draw everything
+        # Draw
         self.draw_game()
         pygame.display.flip()
 
@@ -673,11 +625,10 @@ class Game:
             self.pickups.append(HealthPickup())
 
     def spawn_powerups(self):
-        # For each powerup type (except the "rarities" key), roll its spawn chance
         pw_conf = config.get("powerups", {})
         for ptype, info in pw_conf.items():
             if ptype == "rarities":
-                continue  # skip the 'rarities' definition
+                continue
             chance = info.get("spawn_chance", 0.0)
             if random.random() < chance:
                 self.powerups.append(Powerup(ptype))
@@ -686,52 +637,73 @@ class Game:
         bullet_conf = config["bullet"]
         enemy_bullet_damage = bullet_conf["enemy_bullet_damage"]
 
-        # Bullets vs Enemies/Obstacles
+        # Player bullets vs. Enemies / Obstacles
         for b in self.bullets[:]:
             if b.from_player:
+                # Check enemies
                 for e in self.enemies[:]:
                     if self.distance(b.x, b.y, e.x, e.y) < (b.radius + e.radius):
                         e.health -= 1
+                        # Enemy hit => play SFX if available
+                        if sound_effects.get("enemy_hit"):
+                            sound_effects["enemy_hit"].play()
+
                         if e.health <= 0:
+                            # Enemy die => play "enemy_die"
+                            if sound_effects.get("enemy_die"):
+                                sound_effects["enemy_die"].play()
                             self.enemies.remove(e)
                             self.score += 10
                         if b in self.bullets:
                             self.bullets.remove(b)
                         break
                 else:
+                    # Check obstacles
                     for o in self.obstacles[:]:
                         if self.distance(b.x, b.y, o.x, o.y) < (b.radius + o.radius):
                             o.health -= 1
+                            # Optionally you can have an "obstacle_hit" SFX if you want
                             if o.health <= 0:
+                                # We can reuse "enemy_die" or define "obstacle_die"
                                 self.obstacles.remove(o)
                                 self.score += 10
                             if b in self.bullets:
                                 self.bullets.remove(b)
                             break
 
-        # Enemy bullets vs Player
+        # Enemy bullets vs. Player
         for b in self.bullets[:]:
             if not b.from_player:
                 if self.distance(b.x, b.y, self.player.x, self.player.y) < (b.radius + self.player.radius):
                     if not self.player.is_shielded():
+                        # Player is hit => "player_hit"
+                        if sound_effects.get("player_hit"):
+                            sound_effects["player_hit"].play()
                         self.player.health -= enemy_bullet_damage
                     if b in self.bullets:
                         self.bullets.remove(b)
 
-        # Obstacles vs Player
+        # Obstacles vs. Player
         for o in self.obstacles[:]:
             if self.distance(o.x, o.y, self.player.x, self.player.y) < (o.radius + self.player.radius):
                 if not self.player.is_shielded():
+                    # Obstacle hits player => "obstacle_hit_player"
+                    if sound_effects.get("obstacle_hit_player"):
+                        sound_effects["obstacle_hit_player"].play()
                     self.player.health -= o.collision_damage
                 if o in self.obstacles:
                     self.obstacles.remove(o)
 
-        # Enemies vs Player
+        # Enemies vs Player (ramming)
         for e in self.enemies[:]:
             if self.distance(e.x, e.y, self.player.x, self.player.y) < (e.radius + self.player.radius):
                 if not self.player.is_shielded():
+                    # Player is hit => "player_hit"
+                    if sound_effects.get("player_hit"):
+                        sound_effects["player_hit"].play()
                     self.player.health -= self.player.collision_with_enemy_damage
                 if e in self.enemies:
+                    # Possibly also kill enemy if you want to (like a suicide run)
                     self.enemies.remove(e)
 
         # Health pickups vs Player
@@ -746,12 +718,19 @@ class Game:
         for pw in self.powerups[:]:
             if self.distance(pw.x, pw.y, self.player.x, self.player.y) < (pw.radius + self.player.radius):
                 ptype = pw.ptype
-                # pass the RARITY-adjusted duration to the player
                 self.player.apply_powerup(ptype, pw.duration)
 
-                # If nuke, kill all enemies & obstacles
+                # Distinct SFX for each powerup type
+                # We'll build a key like "powerup_" + ptype
+                sfx_key = f"powerup_{ptype}"
+                if sound_effects.get(sfx_key):
+                    sound_effects[sfx_key].play()
+
                 if ptype == "nuke":
+                    # nuke => kill all enemies & obstacles
                     for e in self.enemies:
+                        if sound_effects.get("enemy_die"):
+                            sound_effects["enemy_die"].play()
                         self.score += 10
                     for o in self.obstacles:
                         self.score += 10
@@ -776,14 +755,13 @@ class Game:
     def draw_game(self):
         self.screen.fill(COLOR_BLACK)
 
-        # 1) Draw starfield behind everything
+        # Draw starfield
         for (sx, sy) in self.stars:
             pygame.draw.circle(self.screen, COLOR_WHITE, (sx, sy), 2)
 
-        # 2) Gather all game objects with their z_order
+        # Collect all objects in a list for z_order sorting
         to_draw = []
         to_draw.append((self.player.z_order, self.player))
-
         for b in self.bullets:
             to_draw.append((b.z_order, b))
         for e in self.enemies:
@@ -795,14 +773,11 @@ class Game:
         for pw in self.powerups:
             to_draw.append((pw.z_order, pw))
 
-        # 3) Sort them by z_order
         to_draw.sort(key=lambda x: x[0])
-
-        # 4) Draw in sorted order
         for (_, obj) in to_draw:
             obj.draw(self.screen)
 
-        # 5) Draw UI on top
+        # UI
         self.draw_text(f"Score: {int(self.score)}", 24, 50, 20, COLOR_WHITE, align="left")
         self.draw_text(f"Health: {self.player.health}", 24, WIN_WIDTH - 150, 20, COLOR_WHITE, align="left")
 
@@ -835,6 +810,16 @@ class Game:
             (random.randint(0, WIN_WIDTH), random.randint(0, WIN_HEIGHT))
             for _ in range(100)
         ]
+
+    def draw_text(self, text, size, x, y, color, align="center"):
+        font = pygame.font.SysFont(None, size)
+        surface = font.render(text, True, color)
+        rect = surface.get_rect()
+        if align == "center":
+            rect.center = (x, y)
+        else:
+            rect.topleft = (x, y)
+        self.screen.blit(surface, rect)
 
 def main():
     game = Game()
