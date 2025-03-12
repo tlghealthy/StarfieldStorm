@@ -79,13 +79,14 @@ class Player:
     def handle_powerups(self):
         now = pygame.time.get_ticks()
         for ptype in list(self.active_powerups):
-            if now >= self.active_powerups[ptype]:
+            if now >= self.active_powerups[ptype]["expiry"]:
                 del self.active_powerups[ptype]
         self.fire_delay, self.max_speed = self.base_fire, self.base_speed
         if "rapid_fire" in self.active_powerups:
             self.fire_delay = int(self.base_fire * config["powerups"]["rapid_fire"]["fire_delay_factor"])
         if "speed_boost" in self.active_powerups:
             self.max_speed = self.base_speed * config["powerups"]["speed_boost"]["speed_multiplier"]
+
 
     def shoot(self, bullets):
         now = pygame.time.get_ticks()
@@ -112,9 +113,11 @@ class Player:
 
     def is_shielded(self):
         return "shield" in self.active_powerups
-
+    
     def apply_powerup(self, ptype, duration):
-        self.active_powerups[ptype] = pygame.time.get_ticks() + duration
+            now = pygame.time.get_ticks()
+            # Store both expiry and total duration
+            self.active_powerups[ptype] = {"expiry": now + duration, "total": duration}
 
 class Bullet:
     def __init__(self, x, y, dx, dy, color, from_player=False):
@@ -435,21 +438,59 @@ class Game:
                     self.enemies.clear(); self.obstacles.clear()
                 self.powerups.remove(pw)
 
+    def draw_powerup_panel(self):
+        panel_width = int(WIN_WIDTH * 0.2)
+        panel_rect = pygame.Rect(0, 0, panel_width, WIN_HEIGHT)
+        # Draw panel background (dark gray)
+        pygame.draw.rect(self.screen, (30, 30, 30), panel_rect)
+        
+        now = pygame.time.get_ticks()
+        margin = 10
+        bar_height = 20
+        y = margin
+        font = pygame.font.SysFont(None, 18)
+
+        # Iterate through each active powerup and draw its cooldown bar
+        for ptype, data in self.player.active_powerups.items():
+            remaining = max(data["expiry"] - now, 0)
+            fraction = remaining / data["total"] if data["total"] > 0 else 0
+            bar_width = int((panel_width - 2 * margin) * fraction)
+            # Get the powerup color from config (default to white if not specified)
+            pcolor = tuple(config["powerups"].get(ptype, {}).get("color", [255, 255, 255]))
+            
+            # Draw the border for the bar
+            border_rect = pygame.Rect(margin, y, panel_width - 2 * margin, bar_height)
+            pygame.draw.rect(self.screen, (255, 255, 255), border_rect, 1)
+            # Draw the filled part of the bar
+            fill_rect = pygame.Rect(margin, y, bar_width, bar_height)
+            pygame.draw.rect(self.screen, pcolor, fill_rect)
+            # Draw the powerup name on top of the bar
+            label = font.render(ptype, True, (255, 255, 255))
+            self.screen.blit(label, (margin, y))
+            y += bar_height + margin
+
     def update_stars(self):
         self.stars = [(sx, sy + 2 if sy + 2 <= WIN_HEIGHT else 0) for sx, sy in self.stars]
 
     def draw_game(self):
         self.screen.fill(COLOR_BLACK)
+        
+        # Draw starfield and game objects as usual…
         for sx, sy in self.stars:
             pygame.draw.circle(self.screen, COLOR_WHITE, (sx, sy), 2)
-        # Gather and sort objects by their z_order
+        
         objects = [(self.player.z_order, self.player)]
         for group in (self.bullets, self.enemies, self.obstacles, self.pickups, self.powerups):
             objects.extend((obj.z_order, obj) for obj in group)
         for _, obj in sorted(objects, key=lambda x: x[0]):
             obj.draw(self.screen)
+        
+        # Draw UI texts (score, health, etc.)
         self.draw_text(f"Score: {int(self.score)}", 24, 50, 20, COLOR_WHITE, "left")
         self.draw_text(f"Health: {self.player.health}", 24, WIN_WIDTH - 150, 20, COLOR_WHITE, "left")
+        
+        # Draw the powerup cooldown panel on the left side
+        self.draw_powerup_panel()
 
     def draw_text(self, text, size, x, y, color, align="center"):
         font = pygame.font.SysFont(None, size)
